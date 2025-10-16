@@ -1,0 +1,29 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+}
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 10px;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #ccc;
+}
+.tool-group {
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+    margin-bottom: 5px;
+}
+.tool-group label {
+    margin-right: 5px;
+}
+.tool.active {
+    background-color: #007bff;
+    color: white;
+}
+canvas {
+    display: block; /* Removes tiny space below the canvas */
+}

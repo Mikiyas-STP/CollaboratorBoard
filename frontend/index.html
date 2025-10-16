@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CollaboraCanvas</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h1>Collaboration  Canvas</h1>
+    <div class="toolbar">
+      <div class="tool-group">
+        <label>Tool:</label>
+        <button class="tool" id="drawBtn">Draw</button>
+        <button class="tool" id="rectBtn">Rectangle</button>
+        <button class="tool" id="textBtn">Text</button>
+      </div>
+      <div class="tool-group">
+        <label for="textInput">Text:</label>
+        <input type="text" id="textInput" placeholder="Enter text here..." />
+      </div>
+      <div class="tool-group">
+        <label for="colorPicker">Color:</label>
+        <input type="color" id="colorPicker" value="#000000" />
+      </div>
+      <div class="tool-group">
+        <label for="brushSize">Size:</label>
+        <input type="range" id="brushSize" min="1" max="50" value="5" />
+      </div>
+      <div class="tool-group">
+        <button id="clearBtn">Clear All</button>
+      </div>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
