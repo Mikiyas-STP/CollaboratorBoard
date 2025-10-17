@@ -9,7 +9,7 @@ if (
   backendUrl = "http://localhost:3001";
 } else {
   // IMPORTANT: REPLACE THIS WITH YOUR ACTUAL DEPLOYED BACKEND URL
-  backendUrl = "https://your-coolify-backend-url.com";
+  backendUrl = "https://collabrationboard-mikiyas-backend.hosting.codeyourfuture.io";
 }
 console.log(`Connecting to backend at: ${backendUrl}`);
 const socket = io(backendUrl);
