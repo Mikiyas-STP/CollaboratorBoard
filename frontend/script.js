@@ -24,6 +24,84 @@ window.addEventListener("load", () => {
   let lastY = 0;
 
   // --- 3. REUSABLE DRAWING FUNCTIONS ---
+  //helper function to wrap our text on a text field
+  function wrapTextAndDraw(text, x, y, maxWidth, lineHeight, color, size) {
+    ctx.fillStyle = color;
+    ctx.font = `${size * 2}px sans-serif`;
+
+    const words = text.split(" ");
+    let line = "";
+    let currentY = y;
+
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + " ";
+      const metrics = ctx.measureText(testLine);
+      const testWidth = metrics.width;
+      if (testWidth > maxWidth && n > 0) {
+        ctx.fillText(line, x, currentY);
+        line = words[n] + " ";
+        currentY += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, currentY);
+  }
+
+  //helper function to create Interactive textarea : we use our wraptext helper function to write some text inside this field
+  function createInteractiveTextArea(x, y, width, height) {
+    // 1. Create the textarea element
+    const textarea = document.createElement("textarea");
+
+    // 2. Position and style it to match the box drawn on the canvas
+    textarea.style.position = "absolute";
+    // We need to account for the canvas's position relative to the page
+    textarea.style.left = `${canvas.offsetLeft + x}px`;
+    textarea.style.top = `${canvas.offsetTop + y}px`;
+    textarea.style.width = `${width}px`;
+    textarea.style.height = `${height}px`;
+
+    // Add some simple styling
+    textarea.style.border = "2px solid #007bff";
+    textarea.style.outline = "none";
+    textarea.style.font = "16px sans-serif";
+    textarea.style.padding = "5px";
+    textarea.style.resize = "none"; // Prevent user from resizing
+
+    // 3. Add it to the document
+    document.body.appendChild(textarea);
+
+    // 4. Immediately focus it so the user can start typing
+    textarea.focus();
+
+    // 5. The "blur" event listener is the key
+    textarea.addEventListener("blur", () => {
+      const text = textarea.value;
+      const color = colorPicker.value;
+      const size = brushSize.value;
+      const lineHeight = size * 2 + 4; // A bit of spacing
+
+      // Draw the final, wrapped text onto the canvas
+      if (text) {
+        wrapTextAndDraw(
+          text,
+          x + 5,
+          y + size * 2,
+          width - 10,
+          lineHeight,
+          color,
+          size
+        );
+
+        // TODO: In the next ticket, we will emit this action
+        // socket.emit('action', { type: 'text', ... });
+      }
+
+      // 6. Cleanup: Remove the textarea from the document
+      document.body.removeChild(textarea);
+    });
+  }
+
   function draw(x0, y0, x1, y1, color, size) {
     ctx.beginPath();
     ctx.moveTo(x0, y0);
@@ -69,26 +147,10 @@ window.addEventListener("load", () => {
 
   // --- 5. LOCAL MOUSE EVENT LISTENERS (for the current user's actions) ---
 
+  // --- THIS IS THE NEW 'mousedown' LISTENER ---
   canvas.addEventListener("mousedown", (e) => {
     isDrawing = true;
-    [lastX, lastY] = [e.offsetX, e.offsetY];
-
-    if (currentMode === "text") {
-      const text = textInput.value;
-      if (text) {
-        const color = colorPicker.value;
-        const size = brushSize.value;
-        drawText(e.offsetX, e.offsetY, text, color, size);
-        socket.emit("action", {
-          type: "text",
-          x: e.offsetX,
-          y: e.offsetY,
-          text,
-          color,
-          size,
-        });
-      }
-    }
+    [lastX, lastY] = [e.offsetX, e.offsetY]; // That's it. It just records the start point.
   });
 
   canvas.addEventListener("mousemove", (e) => {
@@ -110,8 +172,10 @@ window.addEventListener("load", () => {
     }
   });
 
+  // --- THIS IS THE NEW 'mouseup' LISTENER ---
   canvas.addEventListener("mouseup", (e) => {
     if (isDrawing && currentMode === "rectangle") {
+      // This part is the same as before
       const color = colorPicker.value;
       const width = e.offsetX - lastX;
       const height = e.offsetY - lastY;
@@ -124,7 +188,19 @@ window.addEventListener("load", () => {
         height,
         color,
       });
+    } else if (isDrawing && currentMode === "text") {
+      // THIS IS THE NEW PART
+      // This block runs when the user finishes dragging a box in 'text' mode
+      const width = e.offsetX - lastX;
+      const height = e.offsetY - lastY;
+
+      // We only create the text box if it's a reasonably sized box, not an accidental click
+      if (width > 10 || height > 10) {
+        createInteractiveTextArea(lastX, lastY, width, height);
+      }
     }
+
+    // This runs for all modes to signal the end of the action
     isDrawing = false;
   });
 
@@ -132,8 +208,6 @@ window.addEventListener("load", () => {
     isDrawing = false;
   });
 
-
-  
   // This function will fetch the history and draw it on the canvas
   async function loadHistory() {
     try {
