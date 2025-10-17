@@ -1,5 +1,18 @@
-// This line should be at the very top, outside the load event listener
-const socket = io("http://localhost:3001");
+// --- THIS IS THE FINAL, DEPLOYMENT-READY SCRIPT.JS ---
+
+// This block makes the URL environment-aware
+let backendUrl;
+if (
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+) {
+  backendUrl = "http://localhost:3001";
+} else {
+  // IMPORTANT: REPLACE THIS WITH YOUR ACTUAL DEPLOYED BACKEND URL
+  backendUrl = "https://your-coolify-backend-url.com";
+}
+console.log(`Connecting to backend at: ${backendUrl}`);
+const socket = io(backendUrl);
 
 window.addEventListener("load", () => {
   // --- 1. SETUP ---
@@ -11,6 +24,7 @@ window.addEventListener("load", () => {
   const drawBtn = document.getElementById("drawBtn");
   const rectBtn = document.getElementById("rectBtn");
   const textBtn = document.getElementById("textBtn");
+  const mathBtn = document.getElementById("mathBtn");
   const textInput = document.getElementById("textInput");
 
   canvas.width = window.innerWidth;
@@ -22,17 +36,15 @@ window.addEventListener("load", () => {
   let isDrawing = false;
   let lastX = 0;
   let lastY = 0;
+  let latestActionTimestamp = 0;
 
   // --- 3. REUSABLE DRAWING FUNCTIONS ---
-  //helper function to wrap our text on a text field
   function wrapTextAndDraw(text, x, y, maxWidth, lineHeight, color, size) {
     ctx.fillStyle = color;
     ctx.font = `${size * 2}px sans-serif`;
-
     const words = text.split(" ");
     let line = "";
     let currentY = y;
-
     for (let n = 0; n < words.length; n++) {
       const testLine = line + words[n] + " ";
       const metrics = ctx.measureText(testLine);
@@ -48,41 +60,74 @@ window.addEventListener("load", () => {
     ctx.fillText(line, x, currentY);
   }
 
-  //helper function to create Interactive textarea : we use our wraptext helper function to write some text inside this field
-  function createInteractiveTextArea(x, y, width, height) {
-    // 1. Create the textarea element
-    const textarea = document.createElement("textarea");
+  async function renderAndDrawMath(latex, x, y, isFromHistory = false) {
+    const renderTimestamp = latestActionTimestamp;
+    const tempDiv = document.createElement("div");
+    tempDiv.style.visibility = "hidden";
+    tempDiv.innerHTML = `\\(${latex}\\)`;
+    document.body.appendChild(tempDiv);
+    try {
+      await MathJax.typesetPromise([tempDiv]);
+      const svgElement = tempDiv.querySelector("svg");
+      const errorElement = svgElement
+        ? svgElement.querySelector("[data-mjx-error]")
+        : null;
+      if (svgElement && !errorElement) {
+        svgElement.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+        const dataUrl =
+          "data:image/svg+xml;base64," +
+          btoa(unescape(encodeURIComponent(svgData)));
+        const img = new Image();
+        img.onload = () => {
+          if (renderTimestamp === latestActionTimestamp) {
+            ctx.drawImage(img, x, y);
+            if (!isFromHistory) {
+              socket.emit("action", {
+                type: "math",
+                x: x,
+                y: y,
+                latex: latex,
+              });
+            }
+          } else {
+            console.log("Cancelled an outdated math render.");
+          }
+        };
+        img.src = dataUrl;
+      } else {
+        if (!isFromHistory) {
+          alert("Math rendering failed. Please check your LaTeX syntax.");
+        }
+      }
+    } catch (err) {
+      console.error("A critical error occurred in renderAndDrawMath:", err);
+    } finally {
+      document.body.removeChild(tempDiv);
+    }
+  }
 
-    // 2. Position and style it to match the box drawn on the canvas
+  function createInteractiveTextArea(x, y, width, height) {
+    const textarea = document.createElement("textarea");
     textarea.style.position = "absolute";
-    // We need to account for the canvas's position relative to the page
     textarea.style.left = `${canvas.offsetLeft + x}px`;
     textarea.style.top = `${canvas.offsetTop + y}px`;
     textarea.style.width = `${width}px`;
     textarea.style.height = `${height}px`;
-
-    // Add some simple styling
     textarea.style.border = "2px solid #007bff";
     textarea.style.outline = "none";
     textarea.style.font = "16px sans-serif";
     textarea.style.padding = "5px";
-    textarea.style.resize = "none"; // Prevent user from resizing
-
-    // 3. Add it to the document
+    textarea.style.resize = "none";
     document.body.appendChild(textarea);
-
-    // 4. Immediately focus it so the user can start typing
     textarea.focus();
-
-    // 5. The "blur" event listener is the key
     textarea.addEventListener("blur", () => {
       const text = textarea.value;
       const color = colorPicker.value;
       const size = brushSize.value;
-      const lineHeight = size * 2 + 4; // A bit of spacing
-
-      // Draw the final, wrapped text onto the canvas
+      const lineHeight = size * 2 + 4;
       if (text) {
+        const lineHeight = size * 2 + 4;
         wrapTextAndDraw(
           text,
           x + 5,
@@ -92,12 +137,17 @@ window.addEventListener("load", () => {
           color,
           size
         );
-
-        // TODO: In the next ticket, we will emit this action
-        // socket.emit('action', { type: 'text', ... });
+        socket.emit("action", {
+          type: "textBox",
+          x: x + 5,
+          y: y + size * 2,
+          maxWidth: width - 10,
+          lineHeight: lineHeight,
+          text: text,
+          color: color,
+          size: size,
+        });
       }
-
-      // 6. Cleanup: Remove the textarea from the document
       document.body.removeChild(textarea);
     });
   }
@@ -117,15 +167,7 @@ window.addEventListener("load", () => {
     ctx.fillRect(x, y, width, height);
   }
 
-  function drawText(x, y, text, color, size) {
-    ctx.fillStyle = color;
-    ctx.font = `${size * 2}px sans-serif`;
-    ctx.fillText(text, x, y);
-  }
-
   // --- 4. REAL-TIME EVENT HANDLERS ---
-
-  // This listener handles incoming actions from OTHER users
   socket.on("action", (action) => {
     if (action.type === "draw") {
       draw(
@@ -138,19 +180,34 @@ window.addEventListener("load", () => {
       );
     } else if (action.type === "rect") {
       drawRect(action.x, action.y, action.width, action.height, action.color);
-    } else if (action.type === "text") {
-      drawText(action.x, action.y, action.text, action.color, action.size);
+    } else if (action.type === "textBox") {
+      wrapTextAndDraw(
+        action.text,
+        action.x,
+        action.y,
+        action.maxWidth,
+        action.lineHeight,
+        action.color,
+        action.size
+      );
+    } else if (action.type === "math") {
+      renderAndDrawMath(action.latex, action.x, action.y, true);
     } else if (action.type === "clear") {
+      latestActionTimestamp = Date.now();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
   });
 
-  // --- 5. LOCAL MOUSE EVENT LISTENERS (for the current user's actions) ---
-
-  // --- THIS IS THE NEW 'mousedown' LISTENER ---
+  // --- 5. LOCAL MOUSE EVENT LISTENERS ---
   canvas.addEventListener("mousedown", (e) => {
     isDrawing = true;
-    [lastX, lastY] = [e.offsetX, e.offsetY]; // That's it. It just records the start point.
+    [lastX, lastY] = [e.offsetX, e.offsetY];
+    if (currentMode === "math") {
+      const latex = textInput.value;
+      if (latex) {
+        renderAndDrawMath(latex, e.offsetX, e.offsetY);
+      }
+    }
   });
 
   canvas.addEventListener("mousemove", (e) => {
@@ -172,10 +229,8 @@ window.addEventListener("load", () => {
     }
   });
 
-  // --- THIS IS THE NEW 'mouseup' LISTENER ---
   canvas.addEventListener("mouseup", (e) => {
     if (isDrawing && currentMode === "rectangle") {
-      // This part is the same as before
       const color = colorPicker.value;
       const width = e.offsetX - lastX;
       const height = e.offsetY - lastY;
@@ -189,18 +244,12 @@ window.addEventListener("load", () => {
         color,
       });
     } else if (isDrawing && currentMode === "text") {
-      // THIS IS THE NEW PART
-      // This block runs when the user finishes dragging a box in 'text' mode
       const width = e.offsetX - lastX;
       const height = e.offsetY - lastY;
-
-      // We only create the text box if it's a reasonably sized box, not an accidental click
       if (width > 10 || height > 10) {
         createInteractiveTextArea(lastX, lastY, width, height);
       }
     }
-
-    // This runs for all modes to signal the end of the action
     isDrawing = false;
   });
 
@@ -208,18 +257,13 @@ window.addEventListener("load", () => {
     isDrawing = false;
   });
 
-  // This function will fetch the history and draw it on the canvas
   async function loadHistory() {
     try {
-      // Use fetch to make a GET request to our server's /history endpoint
-      const response = await fetch("http://localhost:3001/history");
+      // Use the environment-aware URL
+      const response = await fetch(`${backendUrl}/history`);
       const history = await response.json();
-
-      console.log("History received:", history); // For debugging
-
-      // Loop through each action in the history
-      history.forEach((action) => {
-        // Use the same logic as our socket.on listener to draw each action
+      console.log("History received:", history);
+      for (const action of history) {
         if (action.type === "draw") {
           draw(
             action.x0,
@@ -237,39 +281,33 @@ window.addEventListener("load", () => {
             action.height,
             action.color
           );
-        } else if (action.type === "text") {
-          drawText(action.x, action.y, action.text, action.color, action.size);
-        } else if (action.type === "clear") {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else if (action.type === "textBox") {
+          wrapTextAndDraw(
+            action.text,
+            action.x,
+            action.y,
+            action.maxWidth,
+            action.lineHeight,
+            action.color,
+            action.size
+          );
+        } else if (action.type === "math") {
+          await renderAndDrawMath(action.latex, action.x, action.y, true);
         }
-      });
+      }
     } catch (error) {
       console.error("Failed to load drawing history:", error);
     }
   }
-
-  // Call the function once when the script loads to get the history
   loadHistory();
 
-  // --- 6. TOOLBAR LOGIC (This is the part I missed) ---
-
-  // Event listener for the color picker
-  colorPicker.addEventListener("change", (e) => {
-    // No change needed here, the values are read when an action happens
-  });
-
-  // Event listener for the brush size slider
-  brushSize.addEventListener("change", (e) => {
-    // No change needed here, the values are read when an action happens
-  });
-
-  // Event listener for the "Clear All" button
+  // --- 6. TOOLBAR LOGIC ---
   clearBtn.addEventListener("click", () => {
+    latestActionTimestamp = Date.now();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     socket.emit("action", { type: "clear" });
   });
 
-  // Helper function to manage the "active" state of tool buttons
   function setActiveTool(toolButton) {
     document.querySelectorAll(".tool").forEach((btn) => {
       btn.classList.remove("active");
@@ -277,7 +315,6 @@ window.addEventListener("load", () => {
     toolButton.classList.add("active");
   }
 
-  // Event Listeners for Tool Buttons
   drawBtn.addEventListener("click", () => {
     currentMode = "draw";
     setActiveTool(drawBtn);
@@ -293,6 +330,11 @@ window.addEventListener("load", () => {
     setActiveTool(textBtn);
   });
 
-  // Set the initial active tool on page load
+  mathBtn.addEventListener("click", () => {
+    currentMode = "math";
+    textInput.placeholder = "Enter LaTeX math here...";
+    setActiveTool(mathBtn);
+  });
+
   setActiveTool(drawBtn);
 });
