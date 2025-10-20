@@ -8,9 +8,8 @@
 
 ### Screenshot
 
-`[INSERT A SCREENSHOT OR, EVEN BETTER, AN ANIMATED GIF OF THE APP IN ACTION]`
+<img src="./Screenshot 2025-10-20 at 20.37.12-1.png" alt="Description of screenshot" width="600"/>
 
-A quick GIF showing two browser windows collaborating is highly recommended!
 
 ---
 
