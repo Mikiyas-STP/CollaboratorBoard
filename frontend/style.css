@@ -1,7 +1,7 @@
 body {
     font-family: sans-serif;
     margin: 0;
-    overflow: hidden; /* Prevent scrollbars */
+    overflow: hidden;
 }
 .toolbar {
     display: flex;
@@ -25,5 +25,5 @@ body {
     color: white;
 }
 canvas {
-    display: block; /* Removes tiny space below the canvas */
+    display: block;
 }

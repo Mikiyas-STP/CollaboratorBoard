@@ -1,6 +1,3 @@
-// --- THIS IS THE FINAL, DEPLOYMENT-READY SCRIPT.JS ---
-
-// This block makes the URL environment-aware
 let backendUrl;
 if (
   window.location.hostname === "localhost" ||
@@ -8,14 +5,12 @@ if (
 ) {
   backendUrl = "http://localhost:3001";
 } else {
-  // IMPORTANT: REPLACE THIS WITH YOUR ACTUAL DEPLOYED BACKEND URL
   backendUrl = "https://collabrationboard-mikiyas-backend.hosting.codeyourfuture.io";
 }
 console.log(`Connecting to backend at: ${backendUrl}`);
 const socket = io(backendUrl);
 
 window.addEventListener("load", () => {
-  // --- 1. SETUP ---
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
   const colorPicker = document.getElementById("colorPicker");
@@ -31,14 +26,14 @@ window.addEventListener("load", () => {
   canvas.height =
     window.innerHeight - document.querySelector(".toolbar").offsetHeight;
 
-  // --- 2. STATE MANAGEMENT ---
+  //STATE MANAGEMENT
   let currentMode = "draw";
   let isDrawing = false;
   let lastX = 0;
   let lastY = 0;
   let latestActionTimestamp = 0;
 
-  // --- 3. REUSABLE DRAWING FUNCTIONS ---
+  //REUSABLE DRAWING FUNCTIONS
   function wrapTextAndDraw(text, x, y, maxWidth, lineHeight, color, size) {
     ctx.fillStyle = color;
     ctx.font = `${size * 2}px sans-serif`;
@@ -59,19 +54,19 @@ window.addEventListener("load", () => {
     }
     ctx.fillText(line, x, currentY);
   }
-
+//helper function to draw a math
   async function renderAndDrawMath(latex, x, y, isFromHistory = false) {
     const renderTimestamp = latestActionTimestamp;
     const tempDiv = document.createElement("div");
     tempDiv.style.visibility = "hidden";
     tempDiv.innerHTML = `\\(${latex}\\)`;
     document.body.appendChild(tempDiv);
+
     try {
       await MathJax.typesetPromise([tempDiv]);
       const svgElement = tempDiv.querySelector("svg");
-      const errorElement = svgElement
-        ? svgElement.querySelector("[data-mjx-error]")
-        : null;
+      const errorElement = svgElement ? svgElement.querySelector("[data-mjx-error]") : null;
+
       if (svgElement && !errorElement) {
         svgElement.setAttribute("xmlns", "http://www.w3.org/2000/svg");
         const svgData = new XMLSerializer().serializeToString(svgElement);
@@ -83,30 +78,28 @@ window.addEventListener("load", () => {
           if (renderTimestamp === latestActionTimestamp) {
             ctx.drawImage(img, x, y);
             if (!isFromHistory) {
-              socket.emit("action", {
-                type: "math",
-                x: x,
-                y: y,
-                latex: latex,
-              });
+              socket.emit("action", { type: "math", x: x, y: y, latex: latex, });
             }
           } else {
             console.log("Cancelled an outdated math render.");
           }
         };
         img.src = dataUrl;
-      } else {
+      }
+      else {
         if (!isFromHistory) {
           alert("Math rendering failed. Please check your LaTeX syntax.");
         }
       }
-    } catch (err) {
+    }
+    catch (err) {
       console.error("A critical error occurred in renderAndDrawMath:", err);
-    } finally {
+    }
+    finally {
       document.body.removeChild(tempDiv);
     }
   }
-
+//function to create text area
   function createInteractiveTextArea(x, y, width, height) {
     const textarea = document.createElement("textarea");
     textarea.style.position = "absolute";
@@ -128,30 +121,13 @@ window.addEventListener("load", () => {
       const lineHeight = size * 2 + 4;
       if (text) {
         const lineHeight = size * 2 + 4;
-        wrapTextAndDraw(
-          text,
-          x + 5,
-          y + size * 2,
-          width - 10,
-          lineHeight,
-          color,
-          size
-        );
-        socket.emit("action", {
-          type: "textBox",
-          x: x + 5,
-          y: y + size * 2,
-          maxWidth: width - 10,
-          lineHeight: lineHeight,
-          text: text,
-          color: color,
-          size: size,
-        });
+        wrapTextAndDraw( text, x + 5, y + size * 2, width - 10, lineHeight, color, size );
+        socket.emit("action", { type: "textBox", x: x + 5, y: y + size * 2, maxWidth: width - 10, lineHeight: lineHeight, text: text, color: color, size: size, });
       }
       document.body.removeChild(textarea);
     });
   }
-
+//function to draw a line
   function draw(x0, y0, x1, y1, color, size) {
     ctx.beginPath();
     ctx.moveTo(x0, y0);
@@ -161,13 +137,12 @@ window.addEventListener("load", () => {
     ctx.lineCap = "round";
     ctx.stroke();
   }
-
+//function to draw a rectangle
   function drawRect(x, y, width, height, color) {
     ctx.fillStyle = color;
     ctx.fillRect(x, y, width, height);
   }
-
-  // --- 4. REAL-TIME EVENT HANDLERS ---
+//REAL-TIME EVENT HANDLERS
   socket.on("action", (action) => {
     if (action.type === "draw") {
       draw(
@@ -197,8 +172,7 @@ window.addEventListener("load", () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
   });
-
-  // --- 5. LOCAL MOUSE EVENT LISTENERS ---
+//LOCAL MOUSE EVENT LISTENERS
   canvas.addEventListener("mousedown", (e) => {
     isDrawing = true;
     [lastX, lastY] = [e.offsetX, e.offsetY];
@@ -301,7 +275,7 @@ window.addEventListener("load", () => {
   }
   loadHistory();
 
-  // --- 6. TOOLBAR LOGIC ---
+//TOOLBAR LOGIC
   clearBtn.addEventListener("click", () => {
     latestActionTimestamp = Date.now();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
